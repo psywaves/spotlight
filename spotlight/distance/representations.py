@@ -82,4 +82,4 @@ class CML(nn.Module):
 
         distance = ((user_embedding * item_embedding)**2).sum(1)
 
-        return (-distance)
+        return -distance
