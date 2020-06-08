@@ -80,6 +80,6 @@ class CML(nn.Module):
         user_embedding = user_embedding.squeeze()
         item_embedding = item_embedding.squeeze()
 
-        distance = ((user_embedding * item_embedding)**2).sum(1)
+        distance = ((user_embedding - item_embedding)**2).sum(1)
 
         return -distance

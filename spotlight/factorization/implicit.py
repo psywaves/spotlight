@@ -12,6 +12,7 @@ from spotlight.helpers import _repr_model
 from spotlight.factorization._components import _predict_process_ids
 from spotlight.losses import (adaptive_hinge_loss,
                               bpr_loss,
+                              adaptive_bpr_loss,
                               hinge_loss,
                               pointwise_loss)
 from spotlight.factorization.representations import BilinearNet
@@ -90,7 +91,8 @@ class ImplicitFactorizationModel(object):
         assert loss in ('pointwise',
                         'bpr',
                         'hinge',
-                        'adaptive_hinge')
+                        'adaptive_hinge',
+                        'adaptive_bpr')
 
         self._loss = loss
         self._embedding_dim = embedding_dim
@@ -153,8 +155,12 @@ class ImplicitFactorizationModel(object):
             self._loss_func = pointwise_loss
         elif self._loss == 'bpr':
             self._loss_func = bpr_loss
+        elif self._loss == 'adaptive_bpr':
+            self._loss_func = adaptive_bpr_loss
         elif self._loss == 'hinge':
             self._loss_func = hinge_loss
+        elif self._loss == 'adaptive_hinge':
+            self._loss_func = adaptive_hinge_loss
         else:
             self._loss_func = adaptive_hinge_loss
 
@@ -228,7 +234,7 @@ class ImplicitFactorizationModel(object):
 
                 positive_prediction = self._net(batch_user, batch_item)
 
-                if self._loss == 'adaptive_hinge':
+                if self._loss in ('adaptive_bpr', 'adaptive_hinge'):
                     negative_prediction = self._get_multiple_negative_predictions(
                         batch_user, n=self._num_negative_samples)
                 else:
