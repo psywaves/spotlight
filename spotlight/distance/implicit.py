@@ -177,7 +177,7 @@ class DistanceBasedModel(object):
             raise ValueError('Maximum item id greater '
                              'than number of items in model.')
 
-    def fit(self, interactions, verbose=False):
+    def fit(self, interactions, verbose=False, return_loss=False):
         """
         Fit the model.
 
@@ -243,7 +243,7 @@ class DistanceBasedModel(object):
                 if self._cov_reg is not None:
                     cov_loss = self._covariance_loss()
                     loss += cov_loss * self._cov_reg
-                    epoch_cov_norm += cov_loss
+                    epoch_cov_norm += cov_loss.item()
 
                 loss.backward()
                 self._optimizer.step()
@@ -257,6 +257,9 @@ class DistanceBasedModel(object):
             if np.isnan(epoch_loss) or epoch_loss == 0.0:
                 raise ValueError('Degenerate epoch loss: {}'
                                  .format(epoch_loss))
+
+        if return_loss:
+            return epoch_loss, epoch_cov_norm
 
     def _get_negative_prediction(self, user_ids):
 
