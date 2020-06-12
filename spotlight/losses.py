@@ -132,7 +132,7 @@ def adaptive_bpr_loss(positive_predictions, negative_predictions, mask=None):
     return bpr_loss(positive_predictions, highest_negative_predictions.squeeze(), mask=mask)
 
 
-def hinge_loss(positive_predictions, negative_predictions, mask=None):
+def hinge_loss(positive_predictions, negative_predictions, mask=None, m=1.0):
     """
     Hinge pairwise loss function.
 
@@ -156,7 +156,7 @@ def hinge_loss(positive_predictions, negative_predictions, mask=None):
 
     loss = torch.clamp(negative_predictions -
                        positive_predictions +
-                       1.0, 0.0)
+                       m, 0.0)
 
     if mask is not None:
         mask = mask.float()
@@ -166,7 +166,7 @@ def hinge_loss(positive_predictions, negative_predictions, mask=None):
     return loss.mean()
 
 
-def adaptive_hinge_loss(positive_predictions, negative_predictions, mask=None):
+def adaptive_hinge_loss(positive_predictions, negative_predictions, mask=None, m=1.0):
     """
     Adaptive hinge pairwise loss function. Takes a set of predictions
     for implicitly negative items, and selects those that are highest,
@@ -205,7 +205,52 @@ def adaptive_hinge_loss(positive_predictions, negative_predictions, mask=None):
 
     highest_negative_predictions, _ = torch.max(negative_predictions, 0)
 
-    return hinge_loss(positive_predictions, highest_negative_predictions.squeeze(), mask=mask)
+    return hinge_loss(positive_predictions, highest_negative_predictions.squeeze(), mask=mask, m=m)
+
+
+def warp_hinge_loss(positive_predictions, negative_predictions, mask=None, m=1.0):
+    """
+    WARP loss with hinge end. WIP
+
+    Parameters
+    ----------
+
+    positive_predictions: tensor
+        Tensor containing predictions for known positive items.
+    negative_predictions: tensor
+        Iterable of tensors containing predictions for sampled negative items.
+        More tensors increase the likelihood of finding ranking-violating
+        pairs, but risk overfitting.
+    mask: tensor, optional
+        A binary tensor used to zero the loss from some entries
+        of the loss tensor.
+
+    Returns
+    -------
+
+    loss, float
+        The mean value of the loss function.
+
+    References
+    ----------
+
+    .. [2] Weston, Jason, Samy Bengio, and Nicolas Usunier. "Wsabie:
+       Scaling up to large vocabulary image annotation." IJCAI.
+       Vol. 11. 2011.
+    """
+
+    highest_negative_predictions, _ = torch.max(negative_predictions, 0)
+    loss = torch.clamp(highest_negative_predictions - positive_predictions + m, 0.0)
+
+    rank = torch.mean((negative_predictions - positive_predictions.expand(-1) + m > 0).float(), 0) * 100
+    loss *= torch.log(rank + 1)
+
+    if mask is not None:
+        mask = mask.float()
+        loss = loss * mask
+        return loss.sum() / mask.sum()
+
+    return loss.mean()
 
 
 def regression_loss(observed_ratings, predicted_ratings):

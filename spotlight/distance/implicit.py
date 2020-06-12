@@ -10,13 +10,14 @@ import torch.optim as optim
 
 from spotlight.helpers import _repr_model
 from spotlight.distance._components import _predict_process_ids
-from spotlight.losses import (adaptive_hinge_loss,
+from spotlight.losses import (warp_hinge_loss,
+                              adaptive_hinge_loss,
                               bpr_loss,
                               hinge_loss,
                               pointwise_loss)
 from spotlight.distance.representations import CML
 from spotlight.sampling import sample_items
-from spotlight.torch_utils import cpu, gpu, minibatch, set_seed, shuffle
+from spotlight.torch_utils import cpu, gpu, minibatch, set_seed, shuffle, covariance
 
 
 class DistanceBasedModel(object):
@@ -56,6 +57,9 @@ class DistanceBasedModel(object):
         Random state to use when fitting.
     num_negative_samples: int, optional
         Number of negative samples to generate for adaptive hinge loss.
+    margin: float, optional
+        In the case of hinge type losses, it sets the size of the margin in
+        the loss function. Must be None for non-hinge type losses.
     """
 
     def __init__(self,
@@ -70,12 +74,15 @@ class DistanceBasedModel(object):
                  representation=None,
                  sparse=False,
                  random_state=None,
-                 num_negative_samples=5):
+                 num_negative_samples=5,
+                 margin=None,
+                 cov_reg=None):
 
         assert loss in ('pointwise',
                         'bpr',
                         'hinge',
-                        'adaptive_hinge')
+                        'adaptive_hinge',
+                        'warp_hinge')
 
         self._loss = loss
         self._embedding_dim = embedding_dim
@@ -89,6 +96,8 @@ class DistanceBasedModel(object):
         self._optimizer_func = optimizer_func
         self._random_state = random_state or np.random.RandomState()
         self._num_negative_samples = num_negative_samples
+        self._margin = margin
+        self._cov_reg = cov_reg
 
         self._num_users = None
         self._num_items = None
@@ -140,6 +149,8 @@ class DistanceBasedModel(object):
             self._loss_func = bpr_loss
         elif self._loss == 'hinge':
             self._loss_func = hinge_loss
+        elif self._loss == 'warp_hinge':
+            self._loss_func = warp_hinge_loss
         else:
             self._loss_func = adaptive_hinge_loss
 
@@ -204,6 +215,7 @@ class DistanceBasedModel(object):
                                   self._use_cuda)
 
             epoch_loss = 0.0
+            epoch_cov_norm = 0.0
 
             for (minibatch_num,
                  (batch_user,
@@ -213,7 +225,7 @@ class DistanceBasedModel(object):
 
                 positive_prediction = self._net(batch_user, batch_item)
 
-                if self._loss == 'adaptive_hinge':
+                if self._loss in ('warp_hinge', 'adaptive_hinge'):
                     negative_prediction = self._get_multiple_negative_predictions(
                         batch_user, n=self._num_negative_samples)
                 else:
@@ -221,16 +233,26 @@ class DistanceBasedModel(object):
 
                 self._optimizer.zero_grad()
 
-                loss = self._loss_func(positive_prediction, negative_prediction)
+                if self._margin is not None:
+                    loss = self._loss_func(positive_prediction, negative_prediction, m=self._margin)
+                else:
+                    loss = self._loss_func(positive_prediction, negative_prediction)
+
                 epoch_loss += loss.item()
+
+                if self._cov_reg is not None:
+                    cov_loss = self._covariance_loss()
+                    loss += cov_loss * self._cov_reg
+                    epoch_cov_norm += cov_loss
 
                 loss.backward()
                 self._optimizer.step()
 
             epoch_loss /= minibatch_num + 1
+            epoch_cov_norm /= minibatch_num + 1
 
             if verbose:
-                print('Epoch {}: loss {}'.format(epoch_num, epoch_loss))
+                print('Epoch {}: loss {}, cov_norm {}'.format(epoch_num, epoch_loss, epoch_cov_norm))
 
             if np.isnan(epoch_loss) or epoch_loss == 0.0:
                 raise ValueError('Degenerate epoch loss: {}'
@@ -258,6 +280,16 @@ class DistanceBasedModel(object):
                                                             .reshape(batch_size * n))
 
         return negative_prediction.view(n, len(user_ids))
+
+    def _covariance_loss(self):
+        # TODO
+        user_embeddings = self._net.user_embeddings
+        item_embeddings = self._net.item_embeddings
+
+        X = torch.cat((user_embeddings.weight, item_embeddings.weight), 0)
+        C = covariance(X)
+
+        return C.fill_diagonal_(0).norm()
 
     def predict(self, user_ids, item_ids=None):
         """
