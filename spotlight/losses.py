@@ -208,7 +208,7 @@ def adaptive_hinge_loss(positive_predictions, negative_predictions, mask=None, m
     return hinge_loss(positive_predictions, highest_negative_predictions.squeeze(), mask=mask, m=m)
 
 
-def warp_hinge_loss(positive_predictions, negative_predictions, mask=None, m=1.0):
+def warp_loss(positive_predictions, negative_predictions, mask=None, m=1.0):
     """
     WARP loss with hinge end. WIP
 

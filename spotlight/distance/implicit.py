@@ -15,7 +15,7 @@ from spotlight.losses import (warp_hinge_loss,
                               bpr_loss,
                               hinge_loss,
                               pointwise_loss)
-from spotlight.distance.representations import CML
+from spotlight.distance.representations import CML, LRML
 from spotlight.sampling import sample_items
 from spotlight.torch_utils import cpu, gpu, minibatch, set_seed, shuffle, covariance
 
@@ -65,6 +65,7 @@ class DistanceBasedModel(object):
     def __init__(self,
                  loss='pointwise',
                  embedding_dim=32,
+                 memory_dim=10,
                  n_iter=10,
                  batch_size=256,
                  l2=0.0,
@@ -86,6 +87,7 @@ class DistanceBasedModel(object):
 
         self._loss = loss
         self._embedding_dim = embedding_dim
+        self._memory_dim = memory_dim
         self._n_iter = n_iter
         self._learning_rate = learning_rate
         self._batch_size = batch_size
@@ -122,10 +124,7 @@ class DistanceBasedModel(object):
          self._num_items) = (interactions.num_users,
                              interactions.num_items)
 
-        if self._representation is not None:
-            self._net = gpu(self._representation,
-                            self._use_cuda)
-        else:
+        if self._representation == "cml":
             self._net = gpu(
                 CML(self._num_users,
                     self._num_items,
@@ -133,6 +132,18 @@ class DistanceBasedModel(object):
                     sparse=self._sparse),
                 self._use_cuda
             )
+        elif self._representation == "lrml":
+            self._net = gpu(
+                LRML(self._num_users,
+                     self._num_items,
+                     self._embedding_dim,
+                     self._memory_dim,
+                     sparse=self._sparse),
+                self._use_cuda
+            )
+        else:
+            self._net = gpu(self._representation,
+                            self._use_cuda)
 
         if self._optimizer_func is None:
             self._optimizer = optim.Adam(

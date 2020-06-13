@@ -10,7 +10,8 @@ import torch.optim as optim
 
 from spotlight.helpers import _repr_model
 from spotlight.factorization._components import _predict_process_ids
-from spotlight.losses import (adaptive_hinge_loss,
+from spotlight.losses import (warp_loss,
+                              adaptive_hinge_loss,
                               bpr_loss,
                               adaptive_bpr_loss,
                               hinge_loss,
