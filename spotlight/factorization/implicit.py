@@ -87,13 +87,15 @@ class ImplicitFactorizationModel(object):
                  representation=None,
                  sparse=False,
                  random_state=None,
-                 num_negative_samples=5):
+                 num_negative_samples=5,
+                 margin=None):
 
         assert loss in ('pointwise',
                         'bpr',
                         'hinge',
                         'adaptive_hinge',
-                        'adaptive_bpr')
+                        'adaptive_bpr',
+                        'warp')
 
         self._loss = loss
         self._embedding_dim = embedding_dim
@@ -107,6 +109,7 @@ class ImplicitFactorizationModel(object):
         self._optimizer_func = optimizer_func
         self._random_state = random_state or np.random.RandomState()
         self._num_negative_samples = num_negative_samples
+        self._margin = margin
 
         self._num_users = None
         self._num_items = None
@@ -162,6 +165,8 @@ class ImplicitFactorizationModel(object):
             self._loss_func = hinge_loss
         elif self._loss == 'adaptive_hinge':
             self._loss_func = adaptive_hinge_loss
+        elif self._loss == 'warp':
+            self._loss_func = warp_loss
         else:
             self._loss_func = adaptive_hinge_loss
 
@@ -235,7 +240,7 @@ class ImplicitFactorizationModel(object):
 
                 positive_prediction = self._net(batch_user, batch_item)
 
-                if self._loss in ('adaptive_bpr', 'adaptive_hinge'):
+                if self._loss in ('warp', 'adaptive_bpr', 'adaptive_hinge'):
                     negative_prediction = self._get_multiple_negative_predictions(
                         batch_user, n=self._num_negative_samples)
                 else:
@@ -243,7 +248,11 @@ class ImplicitFactorizationModel(object):
 
                 self._optimizer.zero_grad()
 
-                loss = self._loss_func(positive_prediction, negative_prediction)
+                if self._margin is not None:
+                    loss = self._loss_func(positive_prediction, negative_prediction, m=self._margin)
+                else:
+                    loss = self._loss_func(positive_prediction, negative_prediction)
+
                 epoch_loss += loss.item()
 
                 loss.backward()

@@ -10,7 +10,7 @@ import torch.optim as optim
 
 from spotlight.helpers import _repr_model
 from spotlight.distance._components import _predict_process_ids
-from spotlight.losses import (warp_hinge_loss,
+from spotlight.losses import (warp_loss,
                               adaptive_hinge_loss,
                               bpr_loss,
                               hinge_loss,
@@ -83,7 +83,7 @@ class DistanceBasedModel(object):
                         'bpr',
                         'hinge',
                         'adaptive_hinge',
-                        'warp_hinge')
+                        'warp')
 
         self._loss = loss
         self._embedding_dim = embedding_dim
@@ -160,8 +160,8 @@ class DistanceBasedModel(object):
             self._loss_func = bpr_loss
         elif self._loss == 'hinge':
             self._loss_func = hinge_loss
-        elif self._loss == 'warp_hinge':
-            self._loss_func = warp_hinge_loss
+        elif self._loss == 'warp':
+            self._loss_func = warp_loss
         else:
             self._loss_func = adaptive_hinge_loss
 
@@ -236,7 +236,7 @@ class DistanceBasedModel(object):
 
                 positive_prediction = self._net(batch_user, batch_item)
 
-                if self._loss in ('warp_hinge', 'adaptive_hinge'):
+                if self._loss in ('warp', 'adaptive_hinge'):
                     negative_prediction = self._get_multiple_negative_predictions(
                         batch_user, n=self._num_negative_samples)
                 else:
