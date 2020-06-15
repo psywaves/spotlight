@@ -134,7 +134,7 @@ class LRML(nn.Module):
         )
 
         self.attention_layer = nn.Sequential(
-            nn.Linear(embedding_dim, memory_dim, bias=False).cuda(),
+            nn.Linear(embedding_dim, memory_dim, bias=False),
             nn.Softmax(dim=1)
         )
 
