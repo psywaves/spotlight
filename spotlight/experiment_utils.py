@@ -113,7 +113,7 @@ def factorization(train, test, out_dir=None, data_name="empty", repeats=1, verbo
 
     st = time.time()
 
-    for _ in range(repeats):
+    for _ in tqdm(range(repeats)):
         model = ImplicitFactorizationModel(**kwargs)
         model.fit(train, verbose=verbose)
 
