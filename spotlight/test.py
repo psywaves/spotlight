@@ -1,2 +1,2 @@
 def test():
-    print "master branch"
+    print "cov_test branch"
