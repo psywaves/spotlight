@@ -75,6 +75,7 @@ class DistanceBasedModel(object):
                  representation=None,
                  sparse=False,
                  random_state=None,
+                 adaptive_sampling=False,
                  num_negative_samples=5,
                  margin=None,
                  cov_reg=None):
@@ -97,6 +98,7 @@ class DistanceBasedModel(object):
         self._sparse = sparse
         self._optimizer_func = optimizer_func
         self._random_state = random_state or np.random.RandomState()
+        self._adaptive_sampling = adaptive_sampling
         self._num_negative_samples = num_negative_samples
         self._margin = margin
         self._cov_reg = cov_reg
@@ -238,9 +240,12 @@ class DistanceBasedModel(object):
 
                 if self._loss in ('warp', 'adaptive_hinge'):
                     negative_prediction = self._get_multiple_negative_predictions(
+                         batch_user, n=self._num_negative_samples)
+                elif self._adaptive_sampling:
+                    negative_prediction, batch_negative = self._get_adaptive_negative_prediction(
                         batch_user, n=self._num_negative_samples)
                 else:
-                    negative_prediction = self._get_negative_prediction(batch_user)
+                    negative_prediction, batch_negative = self._get_negative_prediction(batch_user)
 
                 self._optimizer.zero_grad()
 
@@ -252,7 +257,7 @@ class DistanceBasedModel(object):
                 epoch_loss += loss.item()
 
                 if self._cov_reg is not None:
-                    cov_loss = self._covariance_loss()
+                    cov_loss = self._covariance_loss(batch_user, batch_item, batch_negative)
                     loss += cov_loss * self._cov_reg
                     epoch_cov_norm += cov_loss.item()
 
@@ -263,11 +268,12 @@ class DistanceBasedModel(object):
             epoch_cov_norm /= minibatch_num + 1
 
             if verbose:
-                print('Epoch {}: loss {}, cov_norm {}'.format(epoch_num, epoch_loss, epoch_cov_norm))
+                print('Epoch {}: loss {}, cov_norm {}'.format(epoch_num,
+                                                              epoch_loss,
+                                                              epoch_cov_norm))
 
             if np.isnan(epoch_loss) or epoch_loss == 0.0:
-                raise ValueError('Degenerate epoch loss: {}'
-                                 .format(epoch_loss))
+                raise ValueError('Degenerate epoch loss: {}'.format(epoch_loss))
 
         if return_loss:
             return epoch_loss, epoch_cov_norm
@@ -282,25 +288,44 @@ class DistanceBasedModel(object):
 
         negative_prediction = self._net(user_ids, negative_var)
 
-        return negative_prediction
+        return negative_prediction, negative_var
+
+    def _get_adaptive_negative_prediction(self, user_ids, n=5):
+
+        batch_size = user_ids.size(0)
+
+        multi_negative_predictions, multi_negative_ids = self._get_negative_prediction(
+            user_ids.view(batch_size, 1).expand(batch_size, n).reshape(batch_size * n)
+        )
+
+        multi_negative_predictions = multi_negative_predictions.view(n, len(user_ids))
+        multi_negative_ids = multi_negative_ids.view(n, len(user_ids))
+
+        highest_negative_prediction, highest_negative_index = torch.max(
+            multi_negative_predictions, 0)
+        highest_negative_id = multi_negative_ids[highest_negative_index,
+                                                 torch.arange(batch_size)]
+
+        return highest_negative_prediction, highest_negative_id
 
     def _get_multiple_negative_predictions(self, user_ids, n=5):
 
         batch_size = user_ids.size(0)
 
-        negative_prediction = self._get_negative_prediction(user_ids
-                                                            .view(batch_size, 1)
-                                                            .expand(batch_size, n)
-                                                            .reshape(batch_size * n))
+        negative_prediction, _ = self._get_negative_prediction(user_ids
+                                                               .view(batch_size, 1)
+                                                               .expand(batch_size, n)
+                                                               .reshape(batch_size * n))
 
         return negative_prediction.view(n, len(user_ids))
 
-    def _covariance_loss(self):
+    def _covariance_loss(self, user_ids, positive_ids, negative_ids):
         # TODO
-        user_embeddings = self._net.user_embeddings
-        item_embeddings = self._net.item_embeddings
+        user_embeddings = self._net.user_embeddings(user_ids)
+        positive_embeddings = self._net.item_embeddings(positive_ids)
+        negative_embeddings = self._net.item_embeddings(negative_ids)
 
-        X = torch.cat((user_embeddings.weight, item_embeddings.weight), 0)
+        X = torch.cat((user_embeddings, positive_embeddings, negative_embeddings), 0)
         C = covariance(X)
 
         return C.fill_diagonal_(0).norm()
