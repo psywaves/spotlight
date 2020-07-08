@@ -11,6 +11,7 @@ import torch.optim as optim
 from spotlight.helpers import _repr_model
 from spotlight.distance._components import _predict_process_ids
 from spotlight.losses import (warp_loss,
+                              warp_realrank_loss,
                               adaptive_hinge_loss,
                               bpr_loss,
                               hinge_loss,
@@ -83,7 +84,8 @@ class DistanceBasedModel(object):
                         'bpr',
                         'hinge',
                         'adaptive_hinge',
-                        'warp')
+                        'warp',
+                        'warp_realrank')
 
         self._loss = loss
         self._embedding_dim = embedding_dim
@@ -162,6 +164,8 @@ class DistanceBasedModel(object):
             self._loss_func = hinge_loss
         elif self._loss == 'warp':
             self._loss_func = warp_loss
+        elif self._loss == 'warp_realrank':
+            self._loss_func = warp_realrank_loss
         else:
             self._loss_func = adaptive_hinge_loss
 
@@ -236,7 +240,7 @@ class DistanceBasedModel(object):
 
                 positive_prediction = self._net(batch_user, batch_item)
 
-                if self._loss in ('warp', 'adaptive_hinge'):
+                if self._loss in ('warp', 'warp_realrank', 'adaptive_hinge'):
                     negative_prediction = self._get_multiple_negative_predictions(
                         batch_user, n=self._num_negative_samples)
                 else:
@@ -244,7 +248,9 @@ class DistanceBasedModel(object):
 
                 self._optimizer.zero_grad()
 
-                if self._margin is not None:
+                if self._loss == 'warp_realrank':
+                    loss = self._loss_func(positive_prediction, negative_prediction, m=self._margin, size=self._num_items)
+                elif self._margin is not None:
                     loss = self._loss_func(positive_prediction, negative_prediction, m=self._margin)
                 else:
                     loss = self._loss_func(positive_prediction, negative_prediction)
