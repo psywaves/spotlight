@@ -88,7 +88,8 @@ class ImplicitFactorizationModel(object):
                  sparse=False,
                  random_state=None,
                  num_negative_samples=5,
-                 margin=None):
+                 margin=None,
+                 max_norm=1):
 
         assert loss in ('pointwise',
                         'bpr',
@@ -110,6 +111,7 @@ class ImplicitFactorizationModel(object):
         self._random_state = random_state or np.random.RandomState()
         self._num_negative_samples = num_negative_samples
         self._margin = margin
+        self._max_norm = max_norm
 
         self._num_users = None
         self._num_items = None
@@ -142,7 +144,8 @@ class ImplicitFactorizationModel(object):
                 BilinearNet(self._num_users,
                             self._num_items,
                             self._embedding_dim,
-                            sparse=self._sparse),
+                            sparse=self._sparse,
+                            max_norm=self._max_norm),
                 self._use_cuda
             )
 
