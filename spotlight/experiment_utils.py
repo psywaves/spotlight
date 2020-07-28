@@ -14,14 +14,15 @@ def data_load(url, skiprows=2):
         lines = f.readlines()
     item_ids, user_ids, count = [], [], []
     for line in tqdm(lines[skiprows:]):
-        iid, uid, c = map(float, line.split())
-        item_ids.append(iid-1)
-        user_ids.append(uid-1)
+        iid, uid, c = line.split()
+        item_ids.append(iid)
+        user_ids.append(uid)
         count.append(c)
     return np.array([item_ids, user_ids, count], dtype=np.int32)
 
 
-def filter_data(data, min_user_interactions=0, min_item_interactions=0, min_rating=0):
+def filter_data(data, min_user_interactions=0, min_item_interactions=0,
+                min_rating=0, remap_ids=True):
     # we filter by the following order: ratings -> items -> users
     data = data.T if type(data) is np.ndarray else np.vstack(data).T
 
@@ -47,11 +48,12 @@ def filter_data(data, min_user_interactions=0, min_item_interactions=0, min_rati
     uid_set = np.unique(data[0])
     iid_set = np.unique(data[1])
 
-    uid_map = {uid: i for i, uid in enumerate(uid_set)}
-    iid_map = {iid: i for i, iid in enumerate(iid_set)}
+    if remap_ids:
+        uid_map = {uid: i for i, uid in enumerate(uid_set)}
+        iid_map = {iid: i for i, iid in enumerate(iid_set)}
 
-    data[0] = map(lambda x: uid_map[x], data[0])
-    data[1] = map(lambda x: iid_map[x], data[1])
+        data[0] = map(lambda x: uid_map[x], data[0])
+        data[1] = map(lambda x: iid_map[x], data[1])
 
     # print stats
     sparsity = (1 - float(data.T.shape[0])/(uid_set.shape[0]*iid_set.shape[0])) * 100
